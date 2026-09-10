@@ -95,6 +95,50 @@ class GateAttentionB(_GateAttentionBase):
         return self._aggregate_hard(match, values)
 
 
+class CountingGateAttention(nn.Module):
+    """Causal induction-head attention over a token sequence.
+
+    Fixed structure, learned code: position t's query is enc(x_t); position
+    j < t offers key enc(x_j) with value x_{j+1} (the token that followed).
+    Exact code match gates a one-hot of the value, and the readout is the
+    per-vocab COUNT of matched values — softmax replaced by count + argmax,
+    i.e. a multi-way majority vote (the gate-native normalization). The
+    prev-token wiring is built in; what is learned is only the matching
+    circuit. `forward` returns soft logits (scale * soft counts);
+    `forward_hard` returns integer counts from the discretized circuit.
+    """
+
+    def __init__(self, token_bits: int, vocab: int, code_bits: int, hidden: int,
+                 generator: torch.Generator | None = None, residual_init: bool = True):
+        super().__init__()
+        self.vocab = vocab
+        self.enc = GateEncoder([token_bits, hidden, code_bits], generator, residual_init)
+        self.scale = nn.Parameter(torch.tensor(2.0))
+
+    @staticmethod
+    def _shifted_value_onehot(tokens_int: torch.Tensor, vocab: int) -> torch.Tensor:
+        v = nn.functional.one_hot(tokens_int, vocab).float()  # (B, T, V)
+        out = torch.zeros_like(v)
+        out[:, :-1] = v[:, 1:]                                # value at j is x_{j+1}
+        return out
+
+    def forward(self, tokens_bits: torch.Tensor, tokens_int: torch.Tensor) -> torch.Tensor:
+        # tokens_bits (B,T,tb) float, tokens_int (B,T) long -> logits (B,T,V)
+        c = self.enc(tokens_bits)                                       # (B,T,cb)
+        match = _soft_xnor(c.unsqueeze(2), c.unsqueeze(1)).prod(-1)     # (B,Tq,Tk)
+        mask = torch.ones(match.shape[-2:], device=match.device).tril(-1)
+        counts = (match * mask) @ self._shifted_value_onehot(tokens_int, self.vocab)
+        return self.scale * counts
+
+    @torch.no_grad()
+    def forward_hard(self, tokens_bits: torch.Tensor, tokens_int: torch.Tensor) -> torch.Tensor:
+        c = self.enc.forward_hard(tokens_bits)                          # bool (B,T,cb)
+        match = (c.unsqueeze(2) == c.unsqueeze(1)).all(-1)              # (B,Tq,Tk)
+        mask = torch.ones(match.shape[-2:], device=match.device, dtype=torch.bool).tril(-1)
+        counts = (match & mask).float() @ self._shifted_value_onehot(tokens_int, self.vocab)
+        return counts.long()                                            # integer votes
+
+
 class MajorityNorm(nn.Module):
     """Phase-2 placeholder: k-out-of-n majority gate as a normalization
     primitive (popcount >= n/2). Included so the API is settled; unused in
