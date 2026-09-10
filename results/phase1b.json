@@ -1,0 +1,238 @@
+{
+  "config": {
+    "steps": 8000,
+    "seeds": 3,
+    "code_bits": 12,
+    "hidden": 96,
+    "residual_init": true,
+    "mix_lengths": true,
+    "models": "gateA-shared,gateA-sep,gateB-sep,gateB-shared",
+    "out": "phase1b.json"
+  },
+  "results": {
+    "gateA-shared": [
+      {
+        "seed": 0,
+        "train_s": 48.7,
+        "acc": {
+          "N=8": {
+            "soft": 1.0,
+            "hard": 1.0
+          },
+          "N=16": {
+            "soft": 1.0,
+            "hard": 1.0
+          },
+          "N=32": {
+            "soft": 1.0,
+            "hard": 1.0
+          }
+        }
+      },
+      {
+        "seed": 1,
+        "train_s": 43.2,
+        "acc": {
+          "N=8": {
+            "soft": 1.0,
+            "hard": 1.0
+          },
+          "N=16": {
+            "soft": 1.0,
+            "hard": 1.0
+          },
+          "N=32": {
+            "soft": 1.0,
+            "hard": 1.0
+          }
+        }
+      },
+      {
+        "seed": 2,
+        "train_s": 44.1,
+        "acc": {
+          "N=8": {
+            "soft": 1.0,
+            "hard": 1.0
+          },
+          "N=16": {
+            "soft": 1.0,
+            "hard": 1.0
+          },
+          "N=32": {
+            "soft": 1.0,
+            "hard": 1.0
+          }
+        }
+      }
+    ],
+    "gateA-sep": [
+      {
+        "seed": 0,
+        "train_s": 35.3,
+        "acc": {
+          "N=8": {
+            "soft": 0.783,
+            "hard": 0.783
+          },
+          "N=16": {
+            "soft": 0.581,
+            "hard": 0.581
+          },
+          "N=32": {
+            "soft": 0.333,
+            "hard": 0.333
+          }
+        }
+      },
+      {
+        "seed": 1,
+        "train_s": 35.4,
+        "acc": {
+          "N=8": {
+            "soft": 0.79,
+            "hard": 0.79
+          },
+          "N=16": {
+            "soft": 0.5685,
+            "hard": 0.5685
+          },
+          "N=32": {
+            "soft": 0.323,
+            "hard": 0.323
+          }
+        }
+      },
+      {
+        "seed": 2,
+        "train_s": 36.1,
+        "acc": {
+          "N=8": {
+            "soft": 1.0,
+            "hard": 1.0
+          },
+          "N=16": {
+            "soft": 1.0,
+            "hard": 1.0
+          },
+          "N=32": {
+            "soft": 1.0,
+            "hard": 1.0
+          }
+        }
+      }
+    ],
+    "gateB-sep": [
+      {
+        "seed": 0,
+        "train_s": 36.0,
+        "acc": {
+          "N=8": {
+            "soft": 0.995,
+            "hard": 0.9325
+          },
+          "N=16": {
+            "soft": 0.973,
+            "hard": 0.8485
+          },
+          "N=32": {
+            "soft": 0.8895,
+            "hard": 0.7065
+          }
+        }
+      },
+      {
+        "seed": 1,
+        "train_s": 34.6,
+        "acc": {
+          "N=8": {
+            "soft": 0.9985,
+            "hard": 1.0
+          },
+          "N=16": {
+            "soft": 0.968,
+            "hard": 1.0
+          },
+          "N=32": {
+            "soft": 0.91,
+            "hard": 1.0
+          }
+        }
+      },
+      {
+        "seed": 2,
+        "train_s": 35.1,
+        "acc": {
+          "N=8": {
+            "soft": 0.982,
+            "hard": 0.791
+          },
+          "N=16": {
+            "soft": 0.9415,
+            "hard": 0.6025
+          },
+          "N=32": {
+            "soft": 0.771,
+            "hard": 0.361
+          }
+        }
+      }
+    ],
+    "gateB-shared": [
+      {
+        "seed": 0,
+        "train_s": 35.9,
+        "acc": {
+          "N=8": {
+            "soft": 0.9965,
+            "hard": 1.0
+          },
+          "N=16": {
+            "soft": 0.975,
+            "hard": 1.0
+          },
+          "N=32": {
+            "soft": 0.9055,
+            "hard": 1.0
+          }
+        }
+      },
+      {
+        "seed": 1,
+        "train_s": 35.1,
+        "acc": {
+          "N=8": {
+            "soft": 0.9955,
+            "hard": 0.851
+          },
+          "N=16": {
+            "soft": 0.979,
+            "hard": 0.6955
+          },
+          "N=32": {
+            "soft": 0.9055,
+            "hard": 0.471
+          }
+        }
+      },
+      {
+        "seed": 2,
+        "train_s": 35.0,
+        "acc": {
+          "N=8": {
+            "soft": 0.989,
+            "hard": 1.0
+          },
+          "N=16": {
+            "soft": 0.938,
+            "hard": 1.0
+          },
+          "N=32": {
+            "soft": 0.757,
+            "hard": 1.0
+          }
+        }
+      }
+    ]
+  }
+}
