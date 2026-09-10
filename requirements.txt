@@ -1,0 +1,4 @@
+# CPU-only is fine for Phase 0/1. On a GPU machine, additionally install
+# Petersen's `difflogic` (CUDA) and swap gatelogic.layers.LogicLayer for it.
+torch>=2.0
+numpy
