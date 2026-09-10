@@ -38,7 +38,8 @@ GATE_NAMES = [
 class LogicLayer(nn.Module):
     """A layer of `out_dim` two-input logic gates with fixed random wiring."""
 
-    def __init__(self, in_dim: int, out_dim: int, generator: torch.Generator | None = None):
+    def __init__(self, in_dim: int, out_dim: int, generator: torch.Generator | None = None,
+                 residual_init: bool = False):
         super().__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
@@ -50,7 +51,12 @@ class LogicLayer(nn.Module):
         self.register_buffer("idx_a", idx_a)
         self.register_buffer("idx_b", idx_b)
         self.register_buffer("table", _TRUTH_TABLE.clone())
-        self.weights = nn.Parameter(torch.randn(out_dim, 16, generator=generator))
+        w = torch.randn(out_dim, 16, generator=generator)
+        if residual_init:
+            # Bias each neuron toward the pass-through gate "A" (index 3), cf.
+            # residual initialization in Petersen et al.'s convolutional LGNs.
+            w[:, 3] += 5.0
+        self.weights = nn.Parameter(w)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Soft forward. x: (..., in_dim) floats in [0,1] -> (..., out_dim)."""
@@ -94,10 +100,12 @@ class GroupSum(nn.Module):
 class GateEncoder(nn.Module):
     """A stack of LogicLayers, e.g. dims=[6, 64, 6] maps 6 bits -> 6-bit code."""
 
-    def __init__(self, dims: list[int], generator: torch.Generator | None = None):
+    def __init__(self, dims: list[int], generator: torch.Generator | None = None,
+                 residual_init: bool = False):
         super().__init__()
         self.stack = nn.ModuleList(
-            LogicLayer(dims[i], dims[i + 1], generator) for i in range(len(dims) - 1)
+            LogicLayer(dims[i], dims[i + 1], generator, residual_init=residual_init)
+            for i in range(len(dims) - 1)
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

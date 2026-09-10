@@ -37,7 +37,9 @@ RESULTS = Path(__file__).resolve().parent.parent / "results"
 KEY_BITS, VAL_BITS = 6, 4
 N_TRAIN = 8
 EVAL_LENGTHS = [8, 16, 32]
-CODE_BITS, HIDDEN = 6, 64
+
+# overwritten from CLI flags in __main__
+CODE_BITS, HIDDEN, RESIDUAL_INIT = 6, 64, False
 
 
 def to_bits(x: torch.Tensor, bits: int) -> torch.Tensor:
@@ -57,12 +59,15 @@ def make_batch(batch: int, n_pairs: int, g: torch.Generator):
 
 
 def build(name: str, g: torch.Generator):
+    gate_kw = dict(generator=g, residual_init=RESIDUAL_INIT)
     if name == "gateA-shared":
-        return GateAttentionA(KEY_BITS, VAL_BITS, CODE_BITS, HIDDEN, share_qk=True, generator=g), True
+        return GateAttentionA(KEY_BITS, VAL_BITS, CODE_BITS, HIDDEN, share_qk=True, **gate_kw), True
     if name == "gateA-sep":
-        return GateAttentionA(KEY_BITS, VAL_BITS, CODE_BITS, HIDDEN, share_qk=False, generator=g), True
+        return GateAttentionA(KEY_BITS, VAL_BITS, CODE_BITS, HIDDEN, share_qk=False, **gate_kw), True
     if name == "gateB-sep":
-        return GateAttentionB(KEY_BITS, VAL_BITS, CODE_BITS, HIDDEN, share_qk=False, generator=g), True
+        return GateAttentionB(KEY_BITS, VAL_BITS, CODE_BITS, HIDDEN, share_qk=False, **gate_kw), True
+    if name == "gateB-shared":
+        return GateAttentionB(KEY_BITS, VAL_BITS, CODE_BITS, HIDDEN, share_qk=True, **gate_kw), True
     if name == "softmax-attn":
         return SoftmaxAttentionBaseline(KEY_BITS, VAL_BITS, d_model=32), False
     if name == "mlp":
@@ -70,11 +75,13 @@ def build(name: str, g: torch.Generator):
     raise ValueError(name)
 
 
-def train(model, is_gate: bool, steps: int, g: torch.Generator, batch: int = 256):
+def train(model, is_gate: bool, steps: int, g: torch.Generator, batch: int = 256,
+          mix_lengths: bool = False):
     lr = 0.03 if is_gate else 1e-3
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     for step in range(steps):
-        k, v, q, y = make_batch(batch, N_TRAIN, g)
+        n = int(torch.randint(1, N_TRAIN + 1, (1,), generator=g)) if mix_lengths else N_TRAIN
+        k, v, q, y = make_batch(batch, n, g)
         out = model(k, v, q)
         if is_gate:
             loss = F.binary_cross_entropy(out.clamp(1e-6, 1 - 1e-6), y)
@@ -101,9 +108,18 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--steps", type=int, default=4000)
     ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--code-bits", type=int, default=6)
+    ap.add_argument("--hidden", type=int, default=64)
+    ap.add_argument("--residual-init", action="store_true")
+    ap.add_argument("--mix-lengths", action="store_true",
+                    help="sample training length uniformly from 1..N_TRAIN")
+    ap.add_argument("--models", type=str,
+                    default="gateA-shared,gateA-sep,gateB-sep,softmax-attn,mlp")
+    ap.add_argument("--out", type=str, default="phase1.json")
     args = ap.parse_args()
 
-    models = ["gateA-shared", "gateA-sep", "gateB-sep", "softmax-attn", "mlp"]
+    CODE_BITS, HIDDEN, RESIDUAL_INIT = args.code_bits, args.hidden, args.residual_init
+    models = args.models.split(",")
     results = {}
     for name in models:
         results[name] = []
@@ -112,7 +128,7 @@ if __name__ == "__main__":
             torch.manual_seed(1000 + seed)  # for nn.Linear inits
             model, is_gate = build(name, g)
             t0 = time.time()
-            train(model, is_gate, args.steps, g)
+            train(model, is_gate, args.steps, g, mix_lengths=args.mix_lengths)
             entry = {"seed": seed, "train_s": round(time.time() - t0, 1), "acc": {}}
             for n in EVAL_LENGTHS:
                 if name == "mlp" and n != N_TRAIN:
@@ -124,5 +140,6 @@ if __name__ == "__main__":
             results[name].append(entry)
 
     RESULTS.mkdir(exist_ok=True)
-    (RESULTS / "phase1.json").write_text(json.dumps(results, indent=2))
-    print("wrote results/phase1.json")
+    payload = {"config": {k: v for k, v in vars(args).items()}, "results": results}
+    (RESULTS / args.out).write_text(json.dumps(payload, indent=2))
+    print(f"wrote results/{args.out}")

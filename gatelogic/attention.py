@@ -31,11 +31,12 @@ def _soft_xnor(p: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
 class _GateAttentionBase(nn.Module):
     def __init__(self, key_bits: int, val_bits: int, code_bits: int,
                  hidden: int, share_qk: bool = False,
-                 generator: torch.Generator | None = None):
+                 generator: torch.Generator | None = None,
+                 residual_init: bool = False):
         super().__init__()
         self.code_bits = code_bits
-        self.k_enc = GateEncoder([key_bits, hidden, code_bits], generator)
-        self.q_enc = self.k_enc if share_qk else GateEncoder([key_bits, hidden, code_bits], generator)
+        self.k_enc = GateEncoder([key_bits, hidden, code_bits], generator, residual_init)
+        self.q_enc = self.k_enc if share_qk else GateEncoder([key_bits, hidden, code_bits], generator, residual_init)
 
     def _codes(self, keys, query, hard: bool):
         # keys: (B, N, key_bits), query: (B, key_bits)
