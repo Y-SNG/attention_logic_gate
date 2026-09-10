@@ -1,0 +1,384 @@
+<title>ゲートAttention回路ビューア</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --page:#f6f6f3; --surface:#fdfdfc; --ink:#15171a; --ink2:#555a61; --muted:#8a8881;
+  --grid:#e2e1da; --wire:#c6c5bc; --hair:rgba(11,11,11,.10);
+  --accent:#2a78d6; --accent-soft:rgba(42,120,214,.10);
+  --cell-key:#4a4f57; --cell-code:#2a78d6; --cell-empty:#edece7;
+  --good:#006300;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#0e0f10; --surface:#1a1b1d; --ink:#f1f1ec; --ink2:#c2c1b6; --muted:#8a8881;
+    --grid:#2c2c2a; --wire:#3d3d39; --hair:rgba(255,255,255,.10);
+    --accent:#3987e5; --accent-soft:rgba(57,135,229,.16);
+    --cell-key:#b9bdc4; --cell-code:#3987e5; --cell-empty:#24252a;
+    --good:#0ca30c;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#0e0f10; --surface:#1a1b1d; --ink:#f1f1ec; --ink2:#c2c1b6; --muted:#8a8881;
+  --grid:#2c2c2a; --wire:#3d3d39; --hair:rgba(255,255,255,.10);
+  --accent:#3987e5; --accent-soft:rgba(57,135,229,.16);
+  --cell-key:#b9bdc4; --cell-code:#3987e5; --cell-empty:#24252a;
+  --good:#0ca30c;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--page); color:var(--ink);
+  font-family:"IBM Plex Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:15px; line-height:1.75; padding-block:0 56px; padding-inline:20px;
+}
+.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+main{max-width:1020px; margin:0 auto}
+header.page{padding-block:40px 8px; border-bottom:2px solid var(--ink); margin-bottom:24px}
+.eyebrow{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.14em; color:var(--ink2); text-transform:uppercase}
+h1{font-size:clamp(24px,4vw,34px); line-height:1.3; margin:6px 0 10px; font-weight:700; text-wrap:balance}
+.lede{color:var(--ink2); max-width:44em; margin:0 0 20px}
+h2{font-size:19px; margin:44px 0 6px; font-weight:700}
+h2 .no{font-family:"IBM Plex Mono",monospace; color:var(--muted); font-weight:400; margin-right:.5em; font-size:15px}
+.sub{color:var(--ink2); margin:0 0 16px; max-width:46em}
+.tiles{display:flex; flex-wrap:wrap; gap:12px; margin:20px 0 28px}
+.tile{background:var(--surface); border:1px solid var(--hair); border-left:3px solid var(--accent);
+  padding:10px 16px 12px; min-width:150px; flex:1 1 150px}
+.tile .v{font-family:"IBM Plex Mono",monospace; font-size:22px; font-weight:600; line-height:1.25}
+.tile .v small{font-size:13px; font-weight:400; color:var(--ink2)}
+.tile .l{font-size:12px; color:var(--ink2)}
+.pipeline{display:flex; flex-wrap:wrap; align-items:stretch; gap:8px; margin:14px 0 6px}
+.stage{background:var(--surface); border:1px solid var(--hair); padding:8px 12px; flex:1 1 130px; min-width:128px}
+.stage b{display:block; font-size:13.5px}
+.stage.learned{border:1.5px dashed var(--accent); background:var(--accent-soft)}
+.stage .d{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink2); line-height:1.5}
+.arrow{align-self:center; color:var(--muted); font-family:"IBM Plex Mono",monospace}
+.legend-note{font-size:12.5px; color:var(--ink2); margin-top:6px}
+.legend-note .sw{display:inline-block; width:22px; height:0; border-top:1.5px dashed var(--accent); vertical-align:middle; margin-right:5px}
+.panel{background:var(--surface); border:1px solid var(--hair); padding:16px; overflow-x:auto}
+.callout{border-left:3px solid var(--good); background:var(--surface); border-top:1px solid var(--hair);
+  border-right:1px solid var(--hair); border-bottom:1px solid var(--hair);
+  padding:12px 16px; margin:16px 0; max-width:52em}
+.callout b{color:var(--good)}
+svg text{font-family:"IBM Plex Mono",ui-monospace,monospace}
+.node rect{fill:var(--surface); stroke:var(--wire); stroke-width:1.2; rx:3}
+.node text{fill:var(--ink); font-size:12px}
+.node .sub{fill:var(--muted); font-size:10px}
+.node.io rect{stroke:var(--ink2)}
+.edge{fill:none; stroke:var(--wire); stroke-width:1.4}
+.dim .node rect{opacity:.25}.dim .node text{opacity:.25}.dim .edge{opacity:.12}
+.hl .node.on rect{opacity:1; stroke:var(--accent); stroke-width:2}
+.hl .node.on text{opacity:1}
+.hl .edge.on{opacity:1; stroke:var(--accent); stroke-width:2.2}
+.node{cursor:pointer}
+#tip{position:fixed; pointer-events:none; background:var(--surface); color:var(--ink);
+  border:1px solid var(--hair); box-shadow:0 2px 10px rgba(0,0,0,.18);
+  padding:7px 10px; font-size:12.5px; line-height:1.55; display:none; z-index:10; max-width:280px}
+.hm-rowlab{font-family:"IBM Plex Mono",monospace; font-size:10.5px; fill:var(--ink2)}
+.hm-blocklab{font-family:"IBM Plex Mono",monospace; font-size:11px; fill:var(--ink2); letter-spacing:.08em}
+.bars{display:grid; gap:8px; max-width:560px}
+.bar-row{display:grid; grid-template-columns:64px 1fr 120px; align-items:center; gap:10px}
+.bar-row .n{font-family:"IBM Plex Mono",monospace; font-size:12.5px; text-align:right}
+.bar-track{height:16px; background:var(--cell-empty); position:relative}
+.bar-fill{position:absolute; inset:0 auto 0 0; background:var(--accent)}
+.bar-row .c{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink2)}
+table.acc{border-collapse:collapse; font-size:13.5px; margin-top:8px}
+table.acc th,table.acc td{border:1px solid var(--grid); padding:5px 14px; text-align:center}
+table.acc th{background:var(--surface); font-weight:500}
+table.acc td{font-family:"IBM Plex Mono",monospace}
+footer{margin-top:48px; padding-top:14px; border-top:1px solid var(--grid); color:var(--muted); font-size:12.5px}
+footer code{font-family:"IBM Plex Mono",monospace}
+@media (max-width:640px){ .arrow{display:none} .stage{flex-basis:100%} }
+</style>
+
+<main>
+<header class="page">
+  <div class="eyebrow">attention_logic_gate / Phase 1</div>
+  <h1>ゲートAttention回路ビューア</h1>
+  <p class="lede">連想想起タスクを全系列長で100%解く gateA-shared(完全一致型ゲートAttention)を学習後にハード化し、実際に動いている論理回路をそのまま描いたものです。ノードにカーソルを乗せる(タップする)と信号経路が追えます。</p>
+</header>
+
+<div class="tiles">
+  <div class="tile"><div class="v">100<small> %</small></div><div class="l">ハード化精度(N=8/16/32 すべて)</div></div>
+  <div class="tile"><div class="v">23<small> / 108</small></div><div class="l">生存ゲート数(到達可能性で剪定)</div></div>
+  <div class="tile"><div class="v">64<small> / 64</small></div><div class="l">キー→コードの単射性(衝突ゼロ)</div></div>
+  <div class="tile"><div class="v">A<small>(パススルー)のみ</small></div><div class="l">生存ゲートの種類</div></div>
+</div>
+
+<h2><span class="no">01</span>モデル全体の構造</h2>
+<p class="sub">学習されるのは点線のエンコーダ回路のみ。一致判定と集約は固定構造で、位置パラメータを持たないため任意の系列長 N を受理します(長さ汎化は構造から従う)。</p>
+<div class="pipeline">
+  <div class="stage"><b>キー k<sub>i</sub> / クエリ q</b><div class="d">6 bit × N 対 + 1</div></div>
+  <div class="arrow">→</div>
+  <div class="stage learned"><b>エンコーダ(共有・学習)</b><div class="d">LogicLayer 6→96→12<br>code_K, code_Q</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><b>一致判定</b><div class="d">match<sub>i</sub> = AND<sub>j</sub> XNOR(code_K<sub>ij</sub>, code_Q<sub>j</sub>)</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><b>集約</b><div class="d">out = OR<sub>i</sub>(match<sub>i</sub> AND v<sub>i</sub>)<br>4 bit 出力</div></div>
+</div>
+<div class="legend-note"><span class="sw"></span>点線 = 勾配で学習される部分(下の回路図)。それ以外は固定のブール構造。</div>
+
+<h2><span class="no">02</span>学習されたエンコーダ回路(ハード化後・剪定済み)</h2>
+<p class="sub">96個の中間ゲートのうち、12個のコードビットから配線を遡って実際に読まれているのは11個だけ。ノードの表記は <span class="mono">g42 = k3</span> のように、そのゲートの出力を入力ビットの式に解決したものです。</p>
+<div class="panel"><div id="circuit"></div></div>
+<div class="callout"><b>読みどころ:</b> 生き残ったゲートは全てパススルー(gate&nbsp;"A" = 第1入力をそのまま出す)。つまりエンコーダは<b>「6bitキーを12bitへ複製する配線」= 恒等ハッシュ</b>に収束しています。二項論理は使われず、6つの入力ビット全てがコードのどこかに(多くは複数回)写像されることで単射性 = 衝突ゼロを実現しています。residual初期化(パススルー寄りの初期化)がこの解を勾配で到達可能にした、というアブレーション結果と符合します。</div>
+
+<h2><span class="no">03</span>全64キーのコード表</h2>
+<p class="sub">横軸がキー値 0–63(列にカーソルで詳細)。上段6行がキーのビット、下段12行が学習コード。コードの各行がキーのいずれかの行の複製になっていることが縞模様からそのまま見て取れます。64キーのコードは全て相異なります。</p>
+<div class="panel"><div id="heatmap"></div></div>
+
+<h2><span class="no">04</span>中間層96ゲートの内訳</h2>
+<p class="sub">residual初期化の帰結として、中間層の大半が初期値のパススルー "A" に留まっています(塗りが選択数、右端は生存数)。</p>
+<div class="panel"><div class="bars" id="bars"></div></div>
+
+<h2><span class="no">05</span>検証値</h2>
+<table class="acc">
+  <tr><th>系列長</th><th>soft(緩和)</th><th>hard(ビット演算)</th></tr>
+  <tr><th>N=8(学習長)</th><td>100%</td><td>100%</td></tr>
+  <tr><th>N=16</th><td>100%</td><td>100%</td></tr>
+  <tr><th>N=32</th><td>100%</td><td>100%</td></tr>
+</table>
+
+<footer>
+  再現: <code>python experiments/export_circuit.py --seed 0</code>(residual初期化・12bitコード・8000step)→ <code>results/circuit_gateA_shared.json</code> を本ページに埋め込み。剪定は各ゲートが実際に依存する入力のみを遡る到達可能性解析(例: gate "A" は第1入力のみを読む)。
+</footer>
+</main>
+<div id="tip" class="mono"></div>
+
+<script>
+const DATA = __DATA__;
+const GATE_DEPS = {FALSE:[],TRUE:[],A:["a"],NOT_A:["a"],B:["b"],NOT_B:["b"]};
+const deps = g => GATE_DEPS[g] ?? ["a","b"];
+const SYM = {FALSE:"0",TRUE:"1",A:"A",B:"B",NOT_A:"¬A",NOT_B:"¬B",AND:"∧",OR:"∨",XOR:"⊕",XNOR:"⊙",NAND:"⊼",NOR:"⊽",
+  A_AND_NOT_B:"A∧¬B",NOT_A_AND_B:"¬A∧B",A_OR_NOT_B:"A∨¬B",NOT_A_OR_B:"¬A∨B"};
+
+const [L1, L2] = DATA.encoder_layers;
+const tip = document.getElementById("tip");
+
+/* ---- resolve each node's output to an expression over input bits k0..k5 ---- */
+function expr(layer, n){
+  const L = DATA.encoder_layers[layer], gname = L.gate_name[n];
+  const sub = w => layer === 0 ? `k${L[w][n]}` : expr(layer-1, L[w][n]);
+  switch(gname){
+    case "FALSE": return "0"; case "TRUE": return "1";
+    case "A": return sub("a"); case "B": return sub("b");
+    case "NOT_A": return `¬${sub("a")}`; case "NOT_B": return `¬${sub("b")}`;
+    default: return `${sub("a")}${SYM[gname]||"·"}${sub("b")}`;
+  }
+}
+
+/* ------------------------------- circuit SVG ------------------------------- */
+(function drawCircuit(){
+  const liveG = L1.live;                       // layer-1 gates actually read
+  const nCode = L2.out_dim;
+  // order layer-1 nodes by resolved source bit to reduce crossings
+  const gOrder = [...liveG].sort((x,y) => L1.a[x] - L1.a[y] || x - y);
+  const rowH = 46, H = Math.max(6, gOrder.length, nCode) * rowH + 70;
+  const X = {in:96, g:430, c:800}, NW = 118, NH = 28, W = 960;
+  const yFor = (i, count) => 46 + (H-90) * (count === 1 ? .5 : i/(count-1));
+  const pos = {};
+  for (let i = 0; i < 6; i++)      pos[`in${i}`] = {x:X.in, y:yFor(i,6)};
+  gOrder.forEach((n,i) =>          pos[`g${n}`]  = {x:X.g,  y:yFor(i,gOrder.length)});
+  for (let i = 0; i < nCode; i++)  pos[`c${i}`]  = {x:X.c,  y:yFor(i,nCode)};
+
+  // edges (only wires the chosen gate actually reads)
+  const edges = [];
+  liveG.forEach(n => deps(L1.gate_name[n]).forEach(w =>
+    edges.push({from:`in${L1[w][n]}`, to:`g${n}`})));
+  for (let i = 0; i < nCode; i++)
+    deps(L2.gate_name[i]).forEach(w =>
+      edges.push({from:`g${L2[w][i]}`, to:`c${i}`}));
+
+  // adjacency for cone highlighting
+  const up = {}, down = {};
+  edges.forEach(e => {
+    (up[e.to] = up[e.to] || []).push(e.from);
+    (down[e.from] = down[e.from] || []).push(e.to);
+  });
+  const cone = (id, map) => {
+    const seen = new Set([id]), stack = [id];
+    while (stack.length) (map[stack.pop()] || []).forEach(x => {
+      if (!seen.has(x)) { seen.add(x); stack.push(x); }
+    });
+    return seen;
+  };
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", "100%");
+  svg.style.minWidth = "760px";
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "学習されたエンコーダ回路図");
+
+  const colLab = (x, t) => {
+    const e = document.createElementNS(svgNS, "text");
+    e.setAttribute("x", x); e.setAttribute("y", 20);
+    e.setAttribute("text-anchor", "middle");
+    e.setAttribute("class", "hm-blocklab");
+    e.textContent = t; svg.appendChild(e);
+  };
+  colLab(X.in, "入力 6bit");
+  colLab(X.g,  `中間層 生存 ${liveG.length}/96`);
+  colLab(X.c,  "コード 12bit");
+
+  const edgeEls = edges.map(e => {
+    const p = document.createElementNS(svgNS, "path");
+    const a = pos[e.from], b = pos[e.to], mx = (a.x + b.x)/2 + 30;
+    p.setAttribute("d", `M ${a.x + NW/2} ${a.y} C ${mx} ${a.y}, ${mx - 60} ${b.y}, ${b.x - NW/2} ${b.y}`);
+    p.setAttribute("class", "edge");
+    svg.appendChild(p);
+    return {el:p, e};
+  });
+
+  const nodeEls = {};
+  const mkNode = (id, label, sub, io) => {
+    const gEl = document.createElementNS(svgNS, "g");
+    gEl.setAttribute("class", "node" + (io ? " io" : ""));
+    const {x, y} = pos[id];
+    const r = document.createElementNS(svgNS, "rect");
+    r.setAttribute("x", x - NW/2); r.setAttribute("y", y - NH/2);
+    r.setAttribute("width", NW); r.setAttribute("height", NH); r.setAttribute("rx", 3);
+    gEl.appendChild(r);
+    const t = document.createElementNS(svgNS, "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + 4);
+    t.setAttribute("text-anchor", "middle");
+    t.textContent = label;
+    gEl.appendChild(t);
+    if (sub) {
+      const s = document.createElementNS(svgNS, "text");
+      s.setAttribute("x", x); s.setAttribute("y", y + NH/2 + 12);
+      s.setAttribute("text-anchor", "middle"); s.setAttribute("class", "sub");
+      s.textContent = sub;
+      gEl.appendChild(s);
+    }
+    svg.appendChild(gEl);
+    nodeEls[id] = gEl;
+    gEl.addEventListener("mousemove", ev => {
+      tip.style.display = "block";
+      tip.style.left = Math.min(ev.clientX + 14, innerWidth - 300) + "px";
+      tip.style.top = (ev.clientY + 14) + "px";
+      tip.innerHTML = tipText(id);
+    });
+    gEl.addEventListener("mouseleave", () => { tip.style.display = "none"; unlight(); });
+    gEl.addEventListener("mouseenter", () => light(id));
+    gEl.addEventListener("click", ev => { ev.stopPropagation(); light(id); });
+  };
+
+  const tipText = id => {
+    if (id.startsWith("in")) {
+      const i = +id.slice(2);
+      const fan = (down[id] || []).length;
+      return `キービット k${i}(${i === 0 ? "MSB" : i === 5 ? "LSB" : "bit " + (5 - i)})<br>読み先: ${fan} ゲート`;
+    }
+    if (id.startsWith("g")) {
+      const n = +id.slice(1);
+      return `中間ゲート g${n}: ${L1.gate_name[n]}<br>配線: a=k${L1.a[n]}, b=k${L1.b[n]}<br>出力 = ${expr(0, n)}`;
+    }
+    const i = +id.slice(1);
+    return `コードビット c${i}: ${L2.gate_name[i]}<br>配線: a=g${L2.a[i]}, b=g${L2.b[i]}<br>出力 = ${expr(1, i)}`;
+  };
+
+  const light = id => {
+    const set = new Set([...cone(id, up), ...cone(id, down)]);
+    svg.classList.add("dim", "hl");
+    Object.entries(nodeEls).forEach(([k, el]) => el.classList.toggle("on", set.has(k)));
+    edgeEls.forEach(({el, e}) => el.classList.toggle("on", set.has(e.from) && set.has(e.to)));
+  };
+  const unlight = () => {
+    svg.classList.remove("dim", "hl");
+    Object.values(nodeEls).forEach(el => el.classList.remove("on"));
+    edgeEls.forEach(({el}) => el.classList.remove("on"));
+  };
+  document.addEventListener("click", unlight);
+
+  for (let i = 0; i < 6; i++) mkNode(`in${i}`, `k${i}`, null, true);
+  gOrder.forEach(n => mkNode(`g${n}`, `g${n} = ${expr(0, n)}`, null, false));
+  for (let i = 0; i < nCode; i++) mkNode(`c${i}`, `c${i} = ${expr(1, i)}`, null, true);
+
+  document.getElementById("circuit").appendChild(svg);
+})();
+
+/* -------------------------------- heatmap --------------------------------- */
+(function drawHeatmap(){
+  const codes = DATA.key_code_table, nKeys = 64, kb = 6, cb = 12;
+  const cell = 12, gap = 1, labW = 88, blockGap = 14, topLab = 18;
+  const W = labW + nKeys * (cell + gap) + 8;
+  const H = topLab + kb * (cell + gap) + blockGap + cb * (cell + gap) + 6;
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", "100%");
+  svg.style.minWidth = "820px";
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "64キーとその12bit学習コードの対応表");
+
+  const rowY = r => topLab + r * (cell + gap) + (r >= kb ? blockGap : 0);
+  const rowLab = (r, t) => {
+    const e = document.createElementNS(svgNS, "text");
+    e.setAttribute("x", labW - 8); e.setAttribute("y", rowY(r) + cell - 2.5);
+    e.setAttribute("text-anchor", "end"); e.setAttribute("class", "hm-rowlab");
+    e.textContent = t; svg.appendChild(e);
+  };
+  const blockLab = (y, t) => {
+    const e = document.createElementNS(svgNS, "text");
+    e.setAttribute("x", 0); e.setAttribute("y", y); e.setAttribute("class", "hm-blocklab");
+    e.textContent = t; svg.appendChild(e);
+  };
+  blockLab(12, "キー");
+  blockLab(rowY(kb) - 4, "コード");
+
+  const keyBits = k => Array.from({length: kb}, (_, i) => (k >> (kb - 1 - i)) & 1);
+  for (let r = 0; r < kb; r++) rowLab(r, `k${r}`);
+  for (let r = 0; r < cb; r++) rowLab(kb + r, `c${r} = ${expr(1, r)}`);
+
+  const colGroups = [];
+  for (let k = 0; k < nKeys; k++) {
+    const x = labW + k * (cell + gap);
+    const gEl = document.createElementNS(svgNS, "g");
+    const bits = [...keyBits(k), ...codes[k]];
+    bits.forEach((b, r) => {
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", x); rect.setAttribute("y", rowY(r));
+      rect.setAttribute("width", cell); rect.setAttribute("height", cell);
+      rect.setAttribute("fill", b ? (r < kb ? "var(--cell-key)" : "var(--cell-code)") : "var(--cell-empty)");
+      gEl.appendChild(rect);
+    });
+    const hit = document.createElementNS(svgNS, "rect");
+    hit.setAttribute("x", x); hit.setAttribute("y", topLab);
+    hit.setAttribute("width", cell); hit.setAttribute("height", H - topLab);
+    hit.setAttribute("fill", "transparent"); hit.style.cursor = "crosshair";
+    gEl.appendChild(hit);
+    svg.appendChild(gEl);
+    colGroups.push(gEl);
+    hit.addEventListener("mousemove", ev => {
+      tip.style.display = "block";
+      tip.style.left = Math.min(ev.clientX + 14, innerWidth - 300) + "px";
+      tip.style.top = (ev.clientY + 14) + "px";
+      tip.innerHTML = `キー ${k} = ${keyBits(k).join("")}₂<br>コード ${codes[k].join("")}₂<br>衝突: なし(64キーで一意)`;
+      hit.setAttribute("stroke", "var(--accent)"); hit.setAttribute("stroke-width", "1.5");
+    });
+    hit.addEventListener("mouseleave", () => { tip.style.display = "none"; hit.removeAttribute("stroke"); });
+  }
+  document.getElementById("heatmap").appendChild(svg);
+})();
+
+/* ----------------------------- gate-type bars ------------------------------ */
+(function drawBars(){
+  const counts = {}, liveCounts = {};
+  L1.gate_name.forEach((g, i) => {
+    counts[g] = (counts[g] || 0) + 1;
+    if (L1.live.includes(i)) liveCounts[g] = (liveCounts[g] || 0) + 1;
+  });
+  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const max = rows[0][1];
+  const host = document.getElementById("bars");
+  rows.forEach(([g, c]) => {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.innerHTML =
+      `<div class="n">${g}</div>` +
+      `<div class="bar-track"><div class="bar-fill" style="width:${(100 * c / max).toFixed(1)}%"></div></div>` +
+      `<div class="c">${c}(生存 ${liveCounts[g] || 0})</div>`;
+    host.appendChild(row);
+  });
+})();
+</script>
