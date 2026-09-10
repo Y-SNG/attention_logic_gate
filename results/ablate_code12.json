@@ -1,0 +1,70 @@
+{
+  "config": {
+    "steps": 8000,
+    "seeds": 3,
+    "code_bits": 12,
+    "hidden": 96,
+    "residual_init": false,
+    "mix_lengths": false,
+    "models": "gateA-shared",
+    "out": "ablate_code12.json"
+  },
+  "results": {
+    "gateA-shared": [
+      {
+        "seed": 0,
+        "train_s": 53.0,
+        "acc": {
+          "N=8": {
+            "soft": 0.7685,
+            "hard": 0.7685
+          },
+          "N=16": {
+            "soft": 0.585,
+            "hard": 0.585
+          },
+          "N=32": {
+            "soft": 0.3095,
+            "hard": 0.3095
+          }
+        }
+      },
+      {
+        "seed": 1,
+        "train_s": 45.3,
+        "acc": {
+          "N=8": {
+            "soft": 0.7475,
+            "hard": 0.7475
+          },
+          "N=16": {
+            "soft": 0.538,
+            "hard": 0.538
+          },
+          "N=32": {
+            "soft": 0.3145,
+            "hard": 0.3145
+          }
+        }
+      },
+      {
+        "seed": 2,
+        "train_s": 45.3,
+        "acc": {
+          "N=8": {
+            "soft": 0.6805,
+            "hard": 0.6805
+          },
+          "N=16": {
+            "soft": 0.471,
+            "hard": 0.471
+          },
+          "N=32": {
+            "soft": 0.2355,
+            "hard": 0.2355
+          }
+        }
+      }
+    ]
+  }
+}
