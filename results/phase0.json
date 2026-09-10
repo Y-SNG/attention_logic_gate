@@ -1,0 +1,27 @@
+[
+  {
+    "task": "xor2",
+    "soft_acc": 1.0,
+    "hard_acc": 1.0,
+    "soft_hard_agreement": 1.0
+  },
+  {
+    "task": "parity4",
+    "soft_acc": 1.0,
+    "hard_acc": 1.0,
+    "soft_hard_agreement": 1.0
+  },
+  {
+    "task": "mux",
+    "soft_acc": 0.88671875,
+    "hard_acc": 0.88330078125,
+    "soft_hard_agreement": 0.87451171875
+  },
+  {
+    "task": "mnist14x14",
+    "soft_acc": 0.8744,
+    "hard_acc": 0.8724,
+    "gates": 5600,
+    "steps": 4000
+  }
+]
