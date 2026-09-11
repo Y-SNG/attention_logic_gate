@@ -1,0 +1,26 @@
+{
+  "vocab": 65,
+  "T": 64,
+  "bigram-count": {
+    "bpc": 3.5807,
+    "acc": 0.2698
+  },
+  "trigram-count": {
+    "bpc": 2.9608,
+    "acc": 0.3805
+  },
+  "gate-lm": {
+    "bpc": 4.6805,
+    "acc": 0.1798,
+    "train_s": 375.6,
+    "hard_bpc": 9.3581,
+    "hard_acc": 0.1936,
+    "alpha": 27.979,
+    "sample_hard": "\n\nTRANIO:\nLet us entreat you stay till after dinner.\n\nPETRUCHIO: ▌ \nLet yi stay till after dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner dinner d"
+  },
+  "transformer-2L": {
+    "bpc": 2.6829,
+    "acc": 0.4532,
+    "train_s": 56.7
+  }
+}
