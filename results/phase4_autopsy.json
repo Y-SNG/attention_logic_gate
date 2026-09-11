@@ -1,0 +1,65 @@
+{
+  "seed0": {
+    "pipeline": {
+      "N=8": 1.0,
+      "N=16": 1.0,
+      "N=32": 1.0
+    },
+    "hop1_alone": {
+      "N=8": 1.0,
+      "N=16": 1.0,
+      "N=32": 1.0
+    },
+    "hop2_true_query": {
+      "N=8": 1.0,
+      "N=16": 1.0,
+      "N=32": 1.0
+    },
+    "hop1_unique_codes": 64,
+    "hop1_query_self_match": 64,
+    "hop2_unique_codes": 64,
+    "hop2_query_self_match": 64
+  },
+  "seed1": {
+    "pipeline": {
+      "N=8": 0.917,
+      "N=16": 0.813,
+      "N=32": 0.6015
+    },
+    "hop1_alone": {
+      "N=8": 1.0,
+      "N=16": 1.0,
+      "N=32": 1.0
+    },
+    "hop2_true_query": {
+      "N=8": 0.9135,
+      "N=16": 0.7985,
+      "N=32": 0.595
+    },
+    "hop1_unique_codes": 64,
+    "hop1_query_self_match": 64,
+    "hop2_unique_codes": 32,
+    "hop2_query_self_match": 64
+  },
+  "seed2": {
+    "pipeline": {
+      "N=8": 1.0,
+      "N=16": 1.0,
+      "N=32": 1.0
+    },
+    "hop1_alone": {
+      "N=8": 1.0,
+      "N=16": 1.0,
+      "N=32": 1.0
+    },
+    "hop2_true_query": {
+      "N=8": 1.0,
+      "N=16": 1.0,
+      "N=32": 1.0
+    },
+    "hop1_unique_codes": 64,
+    "hop1_query_self_match": 64,
+    "hop2_unique_codes": 64,
+    "hop2_query_self_match": 64
+  }
+}

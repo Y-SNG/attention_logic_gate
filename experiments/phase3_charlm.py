@@ -87,17 +87,21 @@ def sample_windows(ids: torch.Tensor, batch: int, T: int, g: torch.Generator):
 # -------------------------------------------------------------------- model
 
 class GateLM(nn.Module):
-    def __init__(self, vocab: int, g: torch.Generator):
+    def __init__(self, vocab: int, g: torch.Generator,
+                 static_layers: int = 1, two_heads: bool = False):
         super().__init__()
         self.vocab = vocab
         self.tb = (vocab - 1).bit_length()
         pair = 2 * self.tb
         self.att_enc = GateEncoder([pair, ATT_HIDDEN, CODE_BITS], g, residual_init=True)
-        self.static = GateEncoder([pair, STATIC_HIDDEN, vocab * STATIC_PER_CLASS], g,
-                                  residual_init=True)
+        self.uni_enc = (GateEncoder([self.tb, ATT_HIDDEN, CODE_BITS], g, residual_init=True)
+                        if two_heads else None)
+        dims = [pair] + [STATIC_HIDDEN] * static_layers + [vocab * STATIC_PER_CLASS]
+        self.static = GateEncoder(dims, g, residual_init=True)
         self.group = GroupSum(vocab, tau=4.0)
-        self.alpha = nn.Parameter(torch.tensor(3.0))
-        self.beta = nn.Parameter(torch.tensor(1.0))  # static-branch scale
+        self.alpha = nn.Parameter(torch.tensor(3.0))   # bigram-vote scale
+        self.alpha2 = nn.Parameter(torch.tensor(1.0))  # unigram-vote scale
+        self.beta = nn.Parameter(torch.tensor(1.0))    # static-branch scale
 
     def _bits(self, x):
         shifts = torch.arange(self.tb - 1, -1, -1)
@@ -125,8 +129,10 @@ class GateLM(nn.Module):
         static = self.beta * self.group(self.static(pb))
         if static_only:  # stage 1: let the static circuit mature undominated
             return static
-        votes = self._votes(self.att_enc(pb), x, hard=False)
-        return self.alpha * votes + static
+        out = static + self.alpha * self._votes(self.att_enc(pb), x, hard=False)
+        if self.uni_enc is not None:
+            out = out + self.alpha2 * self._votes(self.uni_enc(self._bits(x)), x, hard=False)
+        return out
 
     @torch.no_grad()
     def forward_hard(self, x):
@@ -134,7 +140,12 @@ class GateLM(nn.Module):
         votes = self._votes(self.att_enc.forward_hard(pb), x, hard=True)
         static = self.group(self.static.forward_hard(pb).float())
         # frozen affine readout over integer-derived quantities
-        return float(self.alpha.detach()) * votes + float(self.beta.detach()) * static
+        out = (float(self.alpha.detach()) * votes
+               + float(self.beta.detach()) * static)
+        if self.uni_enc is not None:
+            uv = self._votes(self.uni_enc.forward_hard(self._bits(x).bool()), x, hard=True)
+            out = out + float(self.alpha2.detach()) * uv
+        return out
 
 
 class TinyTransformer(nn.Module):
@@ -197,13 +208,19 @@ def evaluate(model, ids, g, hard=False, n_batches=20, batch=32, T=T_TRAIN):
 
 
 @torch.no_grad()
-def generate(model, ids, chars, g, prime_len=64, gen_len=200):
+def generate(model, ids, chars, g, prime_len=64, gen_len=200, top_k=0, temp=0.8):
     s = int(torch.randint(0, len(ids) - prime_len, (1,), generator=g))
     x = ids[s:s + prime_len].unsqueeze(0).clone()
     for _ in range(gen_len):
-        logits = model.forward_hard(x[:, -T_TRAIN:])
         # the last position's bigram is valid and predicts the next unseen char
-        x = torch.cat([x, logits[:, -1].argmax(-1, keepdim=True)], dim=1)
+        logits = model.forward_hard(x[:, -T_TRAIN:])[:, -1]
+        if top_k > 0:
+            vals, idx = logits.topk(top_k, dim=-1)
+            p = F.softmax(vals / temp, dim=-1)
+            nxt = idx.gather(-1, torch.multinomial(p, 1, generator=g))
+        else:
+            nxt = logits.argmax(-1, keepdim=True)
+        x = torch.cat([x, nxt], dim=1)
     text = "".join(chars[int(i)] for i in x[0])
     return text[:prime_len] + " ▌ " + text[prime_len:]
 
@@ -216,8 +233,12 @@ if __name__ == "__main__":
                     help="stage 1 (50%%): static branch only; stage 2: full model"
                          " - the Phase 3a co-adaptation lesson applied to the LM")
     ap.add_argument("--temp-anneal", action="store_true",
-                    help="anneal gate softmax temperature 1.0 -> 0.2 over the"
-                         " last 40%% of training to close the soft->hard gap")
+                    help="cool gate softmax temperature 1.0 -> 0.25 between"
+                         " 30%% and 60%% of training, then hold, to close the"
+                         " soft->hard gap")
+    ap.add_argument("--static-layers", type=int, default=1)
+    ap.add_argument("--two-heads", action="store_true",
+                    help="add a unigram-key vote head alongside the bigram one")
     ap.add_argument("--out", type=str, default="phase3_charlm.json")
     ap.add_argument("--skip-baselines", action="store_true")
     args = ap.parse_args()
@@ -236,14 +257,17 @@ if __name__ == "__main__":
     for name in (["gate-lm"] if args.skip_baselines else ["gate-lm", "transformer-2L"]):
         torch.manual_seed(1000)
         g = torch.Generator().manual_seed(1000)
-        model = GateLM(V, g) if name == "gate-lm" else TinyTransformer(V, T_TRAIN)
+        model = (GateLM(V, g, static_layers=args.static_layers, two_heads=args.two_heads)
+                 if name == "gate-lm" else TinyTransformer(V, T_TRAIN))
         opt = torch.optim.Adam(model.parameters(), lr=0.03 if name == "gate-lm" else 1e-3)
         t0 = time.time()
         for step in range(args.steps):
             x = sample_windows(train_ids, args.batch, T_TRAIN, g)
             if name == "gate-lm" and args.temp_anneal:
+                # cool between 30% and 60%, then TRAIN at the low temperature
+                # for the remaining 40% so the circuit adapts to it
                 frac = step / args.steps
-                set_temperature(model, 1.0 - 0.8 * max(0.0, (frac - 0.6) / 0.4))
+                set_temperature(model, 1.0 - 0.75 * min(1.0, max(0.0, (frac - 0.3) / 0.3)))
             static_only = (name == "gate-lm" and args.staged
                            and step < args.steps // 2)
             logits = model(x, static_only=static_only) if name == "gate-lm" else model(x)
@@ -265,6 +289,10 @@ if __name__ == "__main__":
             entry["sample_hard"] = sample
             print("--- hardened greedy sample (prime ▌ generation) ---")
             print(sample)
+            sample_k = generate(model, val_ids, chars, g, top_k=5, temp=0.8)
+            entry["sample_hard_topk5"] = sample_k
+            print("--- hardened top-k=5 sample ---")
+            print(sample_k)
         results[name] = entry
         print(name, entry)
 

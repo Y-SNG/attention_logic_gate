@@ -1,0 +1,15 @@
+{
+  "vocab": 65,
+  "T": 64,
+  "gate-lm": {
+    "bpc": 3.6185,
+    "acc": 0.3107,
+    "train_s": 1953.6,
+    "hard_bpc": 5.7651,
+    "hard_acc": 0.1822,
+    "alpha": 3.023,
+    "beta": 8.03,
+    "gate_saturation": 0.6795,
+    "sample_hard": "centio.\n\nBIONDELLO:\nTut, fear not me.\n\nTRANIO:\nBut hast thou don ▌  thou dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I dh anktery I"
+  }
+}
