@@ -93,6 +93,10 @@ def build(name, g):
         return GateTwoHop(g, share_qk=True), True
     if name == "gate-2hop-staged-joint":  # staged, then joint e2e fine-tune
         return GateTwoHop(g, share_qk=True), True
+    if name in ("gate-2hop-warmup",       # hop2 lr warmup, e2e loss only
+                "gate-2hop-aux-warmup",   # + aux on hop1 (soft staging, one run)
+                "gate-2hop-aux-noise"):   # aux + noise on hop2's input
+        return GateTwoHop(g, share_qk=True), True
     if name == "gate-1hop":
         return GateAttentionA(KEY_BITS, KEY_BITS, CODE_BITS, HIDDEN,
                               generator=g, residual_init=True), True
@@ -153,7 +157,43 @@ def train_staged_joint(model, steps, g, batch=256):
         opt.zero_grad(); loss.backward(); opt.step()
 
 
+def train_coadapt(model, steps, g, batch=256, aux=False, warmup=False, noise=0.0):
+    """Freeze-free co-adaptation prevention: hop2's lr is warmed up from 0
+    between 40% and 70% of training (warmup=True), and/or hop1's output is
+    corrupted with annealed random bits before hop2 (noise>0). Single run,
+    no explicit stages."""
+    eps = 1e-6
+    opt1 = torch.optim.Adam(model.hop1.parameters(), lr=0.03)
+    opt2 = torch.optim.Adam(model.hop2.parameters(), lr=0.03)
+    for step in range(steps):
+        frac = step / steps
+        if warmup:
+            lr2 = 0.03 * min(1.0, max(0.0, (frac - 0.4) / 0.3))
+            for pg in opt2.param_groups:
+                pg["lr"] = lr2
+        k, v, q, y, y1 = make_batch(batch, N_TRAIN, g)
+        a1 = model.hop1(k, v, q)
+        a1_in = a1
+        if noise > 0:
+            p = noise * (1 - frac)
+            flip = (torch.rand(a1.shape, generator=g) < p).float()
+            rnd = (torch.rand(a1.shape, generator=g) < 0.5).float()
+            a1_in = a1 * (1 - flip) + rnd * flip
+        out = model.hop2(k, v, a1_in)
+        loss = F.binary_cross_entropy(out.clamp(eps, 1 - eps), y)
+        if aux:
+            loss = loss + F.binary_cross_entropy(a1.clamp(eps, 1 - eps), y1)
+        opt1.zero_grad(); opt2.zero_grad(); loss.backward()
+        opt1.step(); opt2.step()
+
+
 def train(model, is_gate, steps, g, batch=256, mode="none"):
+    if mode == "warmup":
+        return train_coadapt(model, steps, g, batch, aux=False, warmup=True)
+    if mode == "aux-warmup":
+        return train_coadapt(model, steps, g, batch, aux=True, warmup=True)
+    if mode == "aux-noise":
+        return train_coadapt(model, steps, g, batch, aux=True, noise=0.3)
     if mode == "staged":
         return train_staged(model, steps, g, batch)
     if mode == "anneal":
@@ -207,7 +247,10 @@ if __name__ == "__main__":
             g = torch.Generator().manual_seed(1000 + seed)
             model, is_gate = build(name, g)
             t0 = time.time()
-            mode = ("aux" if name.endswith("-aux") else
+            mode = ("aux-warmup" if name.endswith("-aux-warmup") else
+                    "aux-noise" if name.endswith("-aux-noise") else
+                    "warmup" if name.endswith("-warmup") else
+                    "aux" if name.endswith("-aux") else
                     "staged-joint" if name.endswith("-staged-joint") else
                     "staged" if name.endswith("-staged") else
                     "anneal5" if name.endswith("-anneal5") else
