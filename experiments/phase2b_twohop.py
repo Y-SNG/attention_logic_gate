@@ -89,6 +89,8 @@ def build(name, g):
         return GateTwoHop(g, share_qk=True), True
     if name == "gate-2hop-anneal":      # aux weight annealed 1 -> 0
         return GateTwoHop(g, share_qk=True), True
+    if name == "gate-2hop-anneal5":     # aux weight annealed 5 -> 0 (soft staging)
+        return GateTwoHop(g, share_qk=True), True
     if name == "gate-2hop-staged-joint":  # staged, then joint e2e fine-tune
         return GateTwoHop(g, share_qk=True), True
     if name == "gate-1hop":
@@ -121,13 +123,14 @@ def train_staged(model, steps, g, batch=256):
         opt2.zero_grad(); loss.backward(); opt2.step()
 
 
-def train_anneal(model, steps, g, batch=256, aux_end=0.6):
-    """Auxiliary loss on V[q] with weight annealed linearly 1 -> 0 by
-    `aux_end` of training; the remainder is pure end-to-end."""
+def train_anneal(model, steps, g, batch=256, aux_end=0.6, aux_w0=1.0):
+    """Auxiliary loss on V[q] with weight annealed linearly aux_w0 -> 0 by
+    `aux_end` of training; the remainder is pure end-to-end. A large aux_w0
+    approximates staging without ever freezing anything."""
     eps = 1e-6
     opt = torch.optim.Adam(model.parameters(), lr=0.03)
     for step in range(steps):
-        w = max(0.0, 1.0 - step / (aux_end * steps))
+        w = max(0.0, aux_w0 * (1.0 - step / (aux_end * steps)))
         k, v, q, y, y1 = make_batch(batch, N_TRAIN, g)
         a1 = model.hop1(k, v, q)
         out = model.hop2(k, v, a1)
@@ -155,6 +158,8 @@ def train(model, is_gate, steps, g, batch=256, mode="none"):
         return train_staged(model, steps, g, batch)
     if mode == "anneal":
         return train_anneal(model, steps, g, batch)
+    if mode == "anneal5":
+        return train_anneal(model, steps, g, batch, aux_w0=5.0)
     if mode == "staged-joint":
         return train_staged_joint(model, steps, g, batch)
     opt = torch.optim.Adam(model.parameters(), lr=0.03 if is_gate else 1e-3)
@@ -205,6 +210,7 @@ if __name__ == "__main__":
             mode = ("aux" if name.endswith("-aux") else
                     "staged-joint" if name.endswith("-staged-joint") else
                     "staged" if name.endswith("-staged") else
+                    "anneal5" if name.endswith("-anneal5") else
                     "anneal" if name.endswith("-anneal") else "none")
             train(model, is_gate, args.steps, g, mode=mode)
             entry = {"seed": seed, "train_s": round(time.time() - t0, 1), "acc": {}}
