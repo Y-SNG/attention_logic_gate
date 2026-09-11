@@ -38,8 +38,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from gatelogic.layers import GateEncoder, GroupSum
+from gatelogic.layers import GateEncoder, GroupSum, LogicLayer
 from gatelogic.attention import _soft_xnor
+
+
+def set_temperature(model: nn.Module, temp: float):
+    for m in model.modules():
+        if isinstance(m, LogicLayer):
+            m.temp = temp
+
+
+@torch.no_grad()
+def gate_saturation(model: nn.Module) -> float:
+    """Mean max softmax prob over all gates — 1.0 means fully committed."""
+    probs = [F.softmax(m.weights, -1).max(-1).values.mean().item()
+             for m in model.modules() if isinstance(m, LogicLayer)]
+    return sum(probs) / len(probs)
 
 RESULTS = Path(__file__).resolve().parent.parent / "results"
 DATA = Path(__file__).resolve().parent.parent / "data"
@@ -201,6 +215,9 @@ if __name__ == "__main__":
     ap.add_argument("--staged", action="store_true",
                     help="stage 1 (50%%): static branch only; stage 2: full model"
                          " - the Phase 3a co-adaptation lesson applied to the LM")
+    ap.add_argument("--temp-anneal", action="store_true",
+                    help="anneal gate softmax temperature 1.0 -> 0.2 over the"
+                         " last 40%% of training to close the soft->hard gap")
     ap.add_argument("--out", type=str, default="phase3_charlm.json")
     ap.add_argument("--skip-baselines", action="store_true")
     args = ap.parse_args()
@@ -224,6 +241,9 @@ if __name__ == "__main__":
         t0 = time.time()
         for step in range(args.steps):
             x = sample_windows(train_ids, args.batch, T_TRAIN, g)
+            if name == "gate-lm" and args.temp_anneal:
+                frac = step / args.steps
+                set_temperature(model, 1.0 - 0.8 * max(0.0, (frac - 0.6) / 0.4))
             static_only = (name == "gate-lm" and args.staged
                            and step < args.steps // 2)
             logits = model(x, static_only=static_only) if name == "gate-lm" else model(x)
@@ -240,6 +260,7 @@ if __name__ == "__main__":
             entry["hard_bpc"], entry["hard_acc"] = round(hbpc, 4), round(hacc, 4)
             entry["alpha"] = round(float(model.alpha.detach()), 3)
             entry["beta"] = round(float(model.beta.detach()), 3)
+            entry["gate_saturation"] = round(gate_saturation(model), 4)
             sample = generate(model, val_ids, chars, g)
             entry["sample_hard"] = sample
             print("--- hardened greedy sample (prime ▌ generation) ---")

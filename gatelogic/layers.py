@@ -57,6 +57,9 @@ class LogicLayer(nn.Module):
             # residual initialization in Petersen et al.'s convolutional LGNs.
             w[:, 3] += 5.0
         self.weights = nn.Parameter(w)
+        self.temp = 1.0  # softmax temperature; anneal below 1 to sharpen
+                         # gate choices so the relaxation approaches the
+                         # hardened circuit (closes the soft->hard gap)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Soft forward. x: (..., in_dim) floats in [0,1] -> (..., out_dim)."""
@@ -65,7 +68,7 @@ class LogicLayer(nn.Module):
         patterns = torch.stack(
             [(1 - a) * (1 - b), (1 - a) * b, a * (1 - b), a * b], dim=-1
         )  # (..., out_dim, 4)
-        w4 = F.softmax(self.weights, dim=-1) @ self.table  # (out_dim, 4)
+        w4 = F.softmax(self.weights / self.temp, dim=-1) @ self.table  # (out_dim, 4)
         return (patterns * w4).sum(-1)
 
     @torch.no_grad()
