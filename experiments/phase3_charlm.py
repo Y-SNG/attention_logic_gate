@@ -47,7 +47,7 @@ CORPUS_URL = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/ti
 
 T_TRAIN = 64
 CODE_BITS, ATT_HIDDEN = 16, 128
-STATIC_HIDDEN, STATIC_PER_CLASS = 1024, 8
+STATIC_HIDDEN, STATIC_PER_CLASS = 1024, 16
 
 
 # --------------------------------------------------------------------- data
@@ -83,6 +83,7 @@ class GateLM(nn.Module):
                                   residual_init=True)
         self.group = GroupSum(vocab, tau=4.0)
         self.alpha = nn.Parameter(torch.tensor(3.0))
+        self.beta = nn.Parameter(torch.tensor(1.0))  # static-branch scale
 
     def _bits(self, x):
         shifts = torch.arange(self.tb - 1, -1, -1)
@@ -105,10 +106,12 @@ class GateLM(nn.Module):
         val = torch.zeros_like(v); val[:, :-1] = v[:, 1:]
         return (match * mask) @ val             # (B,T,V)
 
-    def forward(self, x):
+    def forward(self, x, static_only: bool = False):
         pb = self._pair_bits(x)
+        static = self.beta * self.group(self.static(pb))
+        if static_only:  # stage 1: let the static circuit mature undominated
+            return static
         votes = self._votes(self.att_enc(pb), x, hard=False)
-        static = self.group(self.static(pb))
         return self.alpha * votes + static
 
     @torch.no_grad()
@@ -116,7 +119,8 @@ class GateLM(nn.Module):
         pb = self._pair_bits(x).bool()
         votes = self._votes(self.att_enc.forward_hard(pb), x, hard=True)
         static = self.group(self.static.forward_hard(pb).float())
-        return float(self.alpha.detach()) * votes + static  # frozen affine readout
+        # frozen affine readout over integer-derived quantities
+        return float(self.alpha.detach()) * votes + float(self.beta.detach()) * static
 
 
 class TinyTransformer(nn.Module):
@@ -194,6 +198,11 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--steps", type=int, default=6000)
     ap.add_argument("--batch", type=int, default=32)
+    ap.add_argument("--staged", action="store_true",
+                    help="stage 1 (50%%): static branch only; stage 2: full model"
+                         " - the Phase 3a co-adaptation lesson applied to the LM")
+    ap.add_argument("--out", type=str, default="phase3_charlm.json")
+    ap.add_argument("--skip-baselines", action="store_true")
     args = ap.parse_args()
 
     train_ids, val_ids, chars = load_corpus()
@@ -201,12 +210,13 @@ if __name__ == "__main__":
     print(f"corpus: {len(train_ids)} train / {len(val_ids)} val chars, vocab {V}")
     results = {"vocab": V, "T": T_TRAIN}
 
-    for order, name in [(1, "bigram-count"), (2, "trigram-count")]:
-        bpc, acc = ngram_bpc(train_ids, val_ids, V, order)
-        results[name] = {"bpc": round(bpc, 4), "acc": round(acc, 4)}
-        print(name, results[name])
+    if not args.skip_baselines:
+        for order, name in [(1, "bigram-count"), (2, "trigram-count")]:
+            bpc, acc = ngram_bpc(train_ids, val_ids, V, order)
+            results[name] = {"bpc": round(bpc, 4), "acc": round(acc, 4)}
+            print(name, results[name])
 
-    for name in ["gate-lm", "transformer-2L"]:
+    for name in (["gate-lm"] if args.skip_baselines else ["gate-lm", "transformer-2L"]):
         torch.manual_seed(1000)
         g = torch.Generator().manual_seed(1000)
         model = GateLM(V, g) if name == "gate-lm" else TinyTransformer(V, T_TRAIN)
@@ -214,7 +224,10 @@ if __name__ == "__main__":
         t0 = time.time()
         for step in range(args.steps):
             x = sample_windows(train_ids, args.batch, T_TRAIN, g)
-            loss = loss_fn(model(x), x)
+            static_only = (name == "gate-lm" and args.staged
+                           and step < args.steps // 2)
+            logits = model(x, static_only=static_only) if name == "gate-lm" else model(x)
+            loss = loss_fn(logits, x)
             opt.zero_grad(); loss.backward(); opt.step()
             if (step + 1) % 1000 == 0:
                 print(f"  {name} step {step+1}/{args.steps} loss {loss.item():.3f} "
@@ -226,6 +239,7 @@ if __name__ == "__main__":
             hbpc, hacc = evaluate(model, val_ids, g, hard=True)
             entry["hard_bpc"], entry["hard_acc"] = round(hbpc, 4), round(hacc, 4)
             entry["alpha"] = round(float(model.alpha.detach()), 3)
+            entry["beta"] = round(float(model.beta.detach()), 3)
             sample = generate(model, val_ids, chars, g)
             entry["sample_hard"] = sample
             print("--- hardened greedy sample (prime ▌ generation) ---")
@@ -234,5 +248,5 @@ if __name__ == "__main__":
         print(name, entry)
 
     RESULTS.mkdir(exist_ok=True)
-    (RESULTS / "phase3_charlm.json").write_text(json.dumps(results, indent=2, ensure_ascii=False))
-    print("wrote results/phase3_charlm.json")
+    (RESULTS / args.out).write_text(json.dumps(results, indent=2, ensure_ascii=False))
+    print(f"wrote results/{args.out}")
