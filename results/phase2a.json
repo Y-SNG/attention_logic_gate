@@ -1,0 +1,126 @@
+{
+  "gateB-sep": [
+    {
+      "seed": 0,
+      "train_s": 56.3,
+      "theta_learned": 9.988,
+      "theta_calibrated": 11,
+      "acc": {
+        "N=8": {
+          "soft": 1.0,
+          "hard": 1.0
+        },
+        "N=16": {
+          "soft": 1.0,
+          "hard": 1.0
+        },
+        "N=32": {
+          "soft": 1.0,
+          "hard": 1.0
+        }
+      }
+    },
+    {
+      "seed": 1,
+      "train_s": 48.7,
+      "theta_learned": 10.085,
+      "theta_calibrated": 11,
+      "acc": {
+        "N=8": {
+          "soft": 1.0,
+          "hard": 1.0
+        },
+        "N=16": {
+          "soft": 1.0,
+          "hard": 1.0
+        },
+        "N=32": {
+          "soft": 1.0,
+          "hard": 1.0
+        }
+      }
+    },
+    {
+      "seed": 2,
+      "train_s": 48.8,
+      "theta_learned": 10.06,
+      "theta_calibrated": 11,
+      "acc": {
+        "N=8": {
+          "soft": 1.0,
+          "hard": 1.0
+        },
+        "N=16": {
+          "soft": 1.0,
+          "hard": 1.0
+        },
+        "N=32": {
+          "soft": 1.0,
+          "hard": 1.0
+        }
+      }
+    }
+  ],
+  "gateB-shared": [
+    {
+      "seed": 0,
+      "train_s": 49.9,
+      "theta_learned": 11.059,
+      "theta_calibrated": 12,
+      "acc": {
+        "N=8": {
+          "soft": 1.0,
+          "hard": 1.0
+        },
+        "N=16": {
+          "soft": 1.0,
+          "hard": 1.0
+        },
+        "N=32": {
+          "soft": 1.0,
+          "hard": 1.0
+        }
+      }
+    },
+    {
+      "seed": 1,
+      "train_s": 49.1,
+      "theta_learned": 10.74,
+      "theta_calibrated": 12,
+      "acc": {
+        "N=8": {
+          "soft": 0.059,
+          "hard": 1.0
+        },
+        "N=16": {
+          "soft": 0.065,
+          "hard": 1.0
+        },
+        "N=32": {
+          "soft": 0.071,
+          "hard": 1.0
+        }
+      }
+    },
+    {
+      "seed": 2,
+      "train_s": 49.4,
+      "theta_learned": 11.171,
+      "theta_calibrated": 12,
+      "acc": {
+        "N=8": {
+          "soft": 1.0,
+          "hard": 1.0
+        },
+        "N=16": {
+          "soft": 1.0,
+          "hard": 1.0
+        },
+        "N=32": {
+          "soft": 1.0,
+          "hard": 1.0
+        }
+      }
+    }
+  ]
+}

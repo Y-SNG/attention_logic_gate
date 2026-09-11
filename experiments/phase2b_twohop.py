@@ -44,17 +44,19 @@ def make_batch(batch: int, n_pairs: int, g: torch.Generator):
     link = torch.randint(0, n_pairs, (batch, n_pairs), generator=g)  # v_i = k_link[i]
     vals_int = keys_int.gather(1, link)
     q_pos = torch.randint(0, n_pairs, (batch,), generator=g)
+    hop1_int = vals_int.gather(1, q_pos.unsqueeze(1)).squeeze(1)     # V[q]
     hop1_pos = link.gather(1, q_pos.unsqueeze(1))                    # position of V[q] as a key
     target_int = vals_int.gather(1, hop1_pos).squeeze(1)             # V[V[q]]
     query_int = keys_int.gather(1, q_pos.unsqueeze(1)).squeeze(1)
     return (to_bits(keys_int, KEY_BITS), to_bits(vals_int, KEY_BITS),
-            to_bits(query_int, KEY_BITS), to_bits(target_int, KEY_BITS))
+            to_bits(query_int, KEY_BITS), to_bits(target_int, KEY_BITS),
+            to_bits(hop1_int, KEY_BITS))
 
 
 class GateTwoHop(nn.Module):
-    def __init__(self, g):
+    def __init__(self, g, share_qk: bool = False):
         super().__init__()
-        kw = dict(generator=g, residual_init=True)
+        kw = dict(generator=g, residual_init=True, share_qk=share_qk)
         self.hop1 = GateAttentionA(KEY_BITS, KEY_BITS, CODE_BITS, HIDDEN, **kw)
         self.hop2 = GateAttentionA(KEY_BITS, KEY_BITS, CODE_BITS, HIDDEN, **kw)
 
@@ -79,6 +81,10 @@ class SoftmaxTwoHop(nn.Module):
 def build(name, g):
     if name == "gate-2hop":
         return GateTwoHop(g), True
+    if name == "gate-2hop-shared":
+        return GateTwoHop(g, share_qk=True), True
+    if name == "gate-2hop-shared-aux":  # aux supervision handled in train()
+        return GateTwoHop(g, share_qk=True), True
     if name == "gate-1hop":
         return GateAttentionA(KEY_BITS, KEY_BITS, CODE_BITS, HIDDEN,
                               generator=g, residual_init=True), True
@@ -89,19 +95,26 @@ def build(name, g):
     raise ValueError(name)
 
 
-def train(model, is_gate, steps, g, batch=256):
+def train(model, is_gate, steps, g, batch=256, aux=False):
     opt = torch.optim.Adam(model.parameters(), lr=0.03 if is_gate else 1e-3)
+    eps = 1e-6
     for _ in range(steps):
-        k, v, q, y = make_batch(batch, N_TRAIN, g)
-        out = model(k, v, q)
-        loss = (F.binary_cross_entropy(out.clamp(1e-6, 1 - 1e-6), y) if is_gate
-                else F.binary_cross_entropy_with_logits(out, y))
+        k, v, q, y, y1 = make_batch(batch, N_TRAIN, g)
+        if aux:  # deep supervision: the intermediate target V[q] is known
+            a1 = model.hop1(k, v, q)
+            out = model.hop2(k, v, a1)
+            loss = (F.binary_cross_entropy(out.clamp(eps, 1 - eps), y)
+                    + F.binary_cross_entropy(a1.clamp(eps, 1 - eps), y1))
+        else:
+            out = model(k, v, q)
+            loss = (F.binary_cross_entropy(out.clamp(eps, 1 - eps), y) if is_gate
+                    else F.binary_cross_entropy_with_logits(out, y))
         opt.zero_grad(); loss.backward(); opt.step()
 
 
 @torch.no_grad()
 def evaluate(model, is_gate, n_pairs, g, n_samples=2000):
-    k, v, q, y = make_batch(n_samples, n_pairs, g)
+    k, v, q, y, _ = make_batch(n_samples, n_pairs, g)
     out = model(k, v, q)
     pred = (out if is_gate else torch.sigmoid(out)) > 0.5
     soft = (pred == y.bool()).all(-1).float().mean().item()
@@ -116,17 +129,19 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--steps", type=int, default=12000)
     ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--models", type=str, default="gate-2hop,gate-1hop,softmax-2hop,mlp")
+    ap.add_argument("--out", type=str, default="phase2b.json")
     args = ap.parse_args()
 
     results = {}
-    for name in ["gate-2hop", "gate-1hop", "softmax-2hop", "mlp"]:
+    for name in args.models.split(","):
         results[name] = []
         for seed in range(args.seeds):
             torch.manual_seed(1000 + seed)
             g = torch.Generator().manual_seed(1000 + seed)
             model, is_gate = build(name, g)
             t0 = time.time()
-            train(model, is_gate, args.steps, g)
+            train(model, is_gate, args.steps, g, aux=name.endswith("-aux"))
             entry = {"seed": seed, "train_s": round(time.time() - t0, 1), "acc": {}}
             for n in EVAL_LENGTHS:
                 if name == "mlp" and n != N_TRAIN:
@@ -138,5 +153,5 @@ if __name__ == "__main__":
             results[name].append(entry)
 
     RESULTS.mkdir(exist_ok=True)
-    (RESULTS / "phase2b.json").write_text(json.dumps(results, indent=2))
-    print("wrote results/phase2b.json")
+    (RESULTS / args.out).write_text(json.dumps(results, indent=2))
+    print(f"wrote results/{args.out}")

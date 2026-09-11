@@ -71,7 +71,7 @@ if __name__ == "__main__":
                                    share_qk=share, generator=g, residual_init=True)
             t0 = time.time()
             train_annealed(model, args.steps, g)
-            theta_raw = float(model.theta)
+            theta_raw = float(model.theta.detach())
             theta_int, cal_acc = calibrate_theta(model, g)
             entry = {"seed": seed, "train_s": round(time.time() - t0, 1),
                      "theta_learned": round(theta_raw, 3), "theta_calibrated": theta_int,
