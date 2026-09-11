@@ -87,6 +87,10 @@ def build(name, g):
         return GateTwoHop(g, share_qk=True), True
     if name == "gate-2hop-staged":      # stage-wise training handled in train()
         return GateTwoHop(g, share_qk=True), True
+    if name == "gate-2hop-anneal":      # aux weight annealed 1 -> 0
+        return GateTwoHop(g, share_qk=True), True
+    if name == "gate-2hop-staged-joint":  # staged, then joint e2e fine-tune
+        return GateTwoHop(g, share_qk=True), True
     if name == "gate-1hop":
         return GateAttentionA(KEY_BITS, KEY_BITS, CODE_BITS, HIDDEN,
                               generator=g, residual_init=True), True
@@ -117,14 +121,47 @@ def train_staged(model, steps, g, batch=256):
         opt2.zero_grad(); loss.backward(); opt2.step()
 
 
-def train(model, is_gate, steps, g, batch=256, aux=False, staged=False):
-    if staged:
+def train_anneal(model, steps, g, batch=256, aux_end=0.6):
+    """Auxiliary loss on V[q] with weight annealed linearly 1 -> 0 by
+    `aux_end` of training; the remainder is pure end-to-end."""
+    eps = 1e-6
+    opt = torch.optim.Adam(model.parameters(), lr=0.03)
+    for step in range(steps):
+        w = max(0.0, 1.0 - step / (aux_end * steps))
+        k, v, q, y, y1 = make_batch(batch, N_TRAIN, g)
+        a1 = model.hop1(k, v, q)
+        out = model.hop2(k, v, a1)
+        loss = F.binary_cross_entropy(out.clamp(eps, 1 - eps), y)
+        if w > 0:
+            loss = loss + w * F.binary_cross_entropy(a1.clamp(eps, 1 - eps), y1)
+        opt.zero_grad(); loss.backward(); opt.step()
+
+
+def train_staged_joint(model, steps, g, batch=256):
+    """Staged training for the first 70%, then a joint end-to-end
+    fine-tune (final loss only, all parameters, lower lr)."""
+    eps = 1e-6
+    train_staged(model, int(steps * 0.7), g, batch)
+    opt = torch.optim.Adam(model.parameters(), lr=0.01)
+    for _ in range(steps - int(steps * 0.7)):
+        k, v, q, y, _ = make_batch(batch, N_TRAIN, g)
+        out = model(k, v, q)
+        loss = F.binary_cross_entropy(out.clamp(eps, 1 - eps), y)
+        opt.zero_grad(); loss.backward(); opt.step()
+
+
+def train(model, is_gate, steps, g, batch=256, mode="none"):
+    if mode == "staged":
         return train_staged(model, steps, g, batch)
+    if mode == "anneal":
+        return train_anneal(model, steps, g, batch)
+    if mode == "staged-joint":
+        return train_staged_joint(model, steps, g, batch)
     opt = torch.optim.Adam(model.parameters(), lr=0.03 if is_gate else 1e-3)
     eps = 1e-6
     for _ in range(steps):
         k, v, q, y, y1 = make_batch(batch, N_TRAIN, g)
-        if aux:  # deep supervision: the intermediate target V[q] is known
+        if mode == "aux":  # deep supervision: the intermediate target V[q] is known
             a1 = model.hop1(k, v, q)
             out = model.hop2(k, v, a1)
             loss = (F.binary_cross_entropy(out.clamp(eps, 1 - eps), y)
@@ -165,8 +202,11 @@ if __name__ == "__main__":
             g = torch.Generator().manual_seed(1000 + seed)
             model, is_gate = build(name, g)
             t0 = time.time()
-            train(model, is_gate, args.steps, g,
-                  aux=name.endswith("-aux"), staged=name.endswith("-staged"))
+            mode = ("aux" if name.endswith("-aux") else
+                    "staged-joint" if name.endswith("-staged-joint") else
+                    "staged" if name.endswith("-staged") else
+                    "anneal" if name.endswith("-anneal") else "none")
+            train(model, is_gate, args.steps, g, mode=mode)
             entry = {"seed": seed, "train_s": round(time.time() - t0, 1), "acc": {}}
             for n in EVAL_LENGTHS:
                 if name == "mlp" and n != N_TRAIN:
