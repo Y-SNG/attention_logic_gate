@@ -293,6 +293,10 @@ if __name__ == "__main__":
             entry["sample_hard_topk5"] = sample_k
             print("--- hardened top-k=5 sample ---")
             print(sample_k)
+        if name == "gate-lm":  # keep the weights so diagnostics don't retrain
+            ckpt = RESULTS / args.out.replace(".json", ".pt")
+            torch.save(model.state_dict(), ckpt)
+            entry["checkpoint"] = ckpt.name
         results[name] = entry
         print(name, entry)
 
