@@ -1,0 +1,17 @@
+{
+  "vocab": 65,
+  "T": 64,
+  "gate-lm": {
+    "bpc": 3.7951,
+    "acc": 0.2816,
+    "train_s": 2135.2,
+    "hard_bpc": 4.0105,
+    "hard_acc": 0.2532,
+    "alpha": 0.363,
+    "beta": 2.402,
+    "gate_saturation": 0.6891,
+    "sample_hard": "re once\nThou call'dst me up at midnight to fetch dew\nFrom the st ▌  st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st st s",
+    "sample_hard_topk5": " of her beauty and her wit,\nHer affability and bashful modesty,\n ▌ \n\n\nSout ther outen st ten st tre stere thence mance st tre mast te she ce ce st te st are st st st st tre mante st st st st st st st st st st st st st st st st st st st st st st st st st st st st st s",
+    "checkpoint": "phase6_gatelm_v04.pt"
+  }
+}
