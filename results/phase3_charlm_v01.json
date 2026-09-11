@@ -1,0 +1,14 @@
+{
+  "vocab": 65,
+  "T": 64,
+  "gate-lm": {
+    "bpc": 3.6096,
+    "acc": 0.3031,
+    "train_s": 874.4,
+    "hard_bpc": 8.9926,
+    "hard_acc": 0.154,
+    "alpha": 4.683,
+    "beta": 12.279,
+    "sample_hard": " say how thou hast disposed\nAnd all the rest o' the fleet.\n\nARIE ▌ :\nAnd, wrIcw abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abance abanc"
+  }
+}
