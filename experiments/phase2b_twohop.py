@@ -85,6 +85,8 @@ def build(name, g):
         return GateTwoHop(g, share_qk=True), True
     if name == "gate-2hop-shared-aux":  # aux supervision handled in train()
         return GateTwoHop(g, share_qk=True), True
+    if name == "gate-2hop-staged":      # stage-wise training handled in train()
+        return GateTwoHop(g, share_qk=True), True
     if name == "gate-1hop":
         return GateAttentionA(KEY_BITS, KEY_BITS, CODE_BITS, HIDDEN,
                               generator=g, residual_init=True), True
@@ -95,7 +97,29 @@ def build(name, g):
     raise ValueError(name)
 
 
-def train(model, is_gate, steps, g, batch=256, aux=False):
+def train_staged(model, steps, g, batch=256):
+    """Stage 1: hop1 alone on the intermediate target V[q] (= Phase 1 recall).
+    Stage 2: hop1 frozen, hop2 alone on the final target, fed hop1's output."""
+    eps = 1e-6
+    opt1 = torch.optim.Adam(model.hop1.parameters(), lr=0.03)
+    for _ in range(steps // 2):
+        k, v, q, _, y1 = make_batch(batch, N_TRAIN, g)
+        a1 = model.hop1(k, v, q)
+        loss = F.binary_cross_entropy(a1.clamp(eps, 1 - eps), y1)
+        opt1.zero_grad(); loss.backward(); opt1.step()
+    opt2 = torch.optim.Adam(model.hop2.parameters(), lr=0.03)
+    for _ in range(steps - steps // 2):
+        k, v, q, y, _ = make_batch(batch, N_TRAIN, g)
+        with torch.no_grad():
+            a1 = model.hop1(k, v, q)
+        out = model.hop2(k, v, a1)
+        loss = F.binary_cross_entropy(out.clamp(eps, 1 - eps), y)
+        opt2.zero_grad(); loss.backward(); opt2.step()
+
+
+def train(model, is_gate, steps, g, batch=256, aux=False, staged=False):
+    if staged:
+        return train_staged(model, steps, g, batch)
     opt = torch.optim.Adam(model.parameters(), lr=0.03 if is_gate else 1e-3)
     eps = 1e-6
     for _ in range(steps):
@@ -141,7 +165,8 @@ if __name__ == "__main__":
             g = torch.Generator().manual_seed(1000 + seed)
             model, is_gate = build(name, g)
             t0 = time.time()
-            train(model, is_gate, args.steps, g, aux=name.endswith("-aux"))
+            train(model, is_gate, args.steps, g,
+                  aux=name.endswith("-aux"), staged=name.endswith("-staged"))
             entry = {"seed": seed, "train_s": round(time.time() - t0, 1), "acc": {}}
             for n in EVAL_LENGTHS:
                 if name == "mlp" and n != N_TRAIN:
