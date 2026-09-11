@@ -48,6 +48,12 @@ def set_temperature(model: nn.Module, temp: float):
             m.temp = temp
 
 
+def set_ste(model: nn.Module, on: bool):
+    for m in model.modules():
+        if isinstance(m, LogicLayer):
+            m.ste = on
+
+
 @torch.no_grad()
 def gate_saturation(model: nn.Module) -> float:
     """Mean max softmax prob over all gates — 1.0 means fully committed."""
@@ -239,6 +245,9 @@ if __name__ == "__main__":
     ap.add_argument("--static-layers", type=int, default=1)
     ap.add_argument("--two-heads", action="store_true",
                     help="add a unigram-key vote head alongside the bigram one")
+    ap.add_argument("--ste-fraction", type=float, default=0.0,
+                    help="run the last X fraction of training with straight-"
+                         "through gates (train the hardened circuit directly)")
     ap.add_argument("--out", type=str, default="phase3_charlm.json")
     ap.add_argument("--skip-baselines", action="store_true")
     args = ap.parse_args()
@@ -268,6 +277,8 @@ if __name__ == "__main__":
                 # for the remaining 40% so the circuit adapts to it
                 frac = step / args.steps
                 set_temperature(model, 1.0 - 0.75 * min(1.0, max(0.0, (frac - 0.3) / 0.3)))
+            if name == "gate-lm" and args.ste_fraction > 0:
+                set_ste(model, step / args.steps >= 1.0 - args.ste_fraction)
             static_only = (name == "gate-lm" and args.staged
                            and step < args.steps // 2)
             logits = model(x, static_only=static_only) if name == "gate-lm" else model(x)
@@ -276,6 +287,8 @@ if __name__ == "__main__":
             if (step + 1) % 1000 == 0:
                 print(f"  {name} step {step+1}/{args.steps} loss {loss.item():.3f} "
                       f"({time.time()-t0:.0f}s)")
+        if name == "gate-lm":
+            set_ste(model, False)  # soft eval below is the relaxation, not STE
         bpc, acc = evaluate(model, val_ids, g)
         entry = {"bpc": round(bpc, 4), "acc": round(acc, 4),
                  "train_s": round(time.time() - t0, 1)}
