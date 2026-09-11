@@ -1,0 +1,39 @@
+{
+  "diagnosis_v03": {
+    "static_soft": 0.3466,
+    "static_hard": 0.1876,
+    "bigram_soft": 0.1055,
+    "bigram_hard": 0.083,
+    "unigram_soft": 0.1141,
+    "unigram_hard": 0.1175,
+    "full_soft": 0.3484,
+    "full_hard": 0.1929,
+    "saturation": {
+      "att_enc": 0.7246,
+      "static": 0.6546,
+      "uni_enc": 0.7233
+    }
+  },
+  "after_ste": {
+    "static_soft": 0.2841,
+    "static_hard": 0.248,
+    "bigram_soft": 0.0986,
+    "bigram_hard": 0.0863,
+    "unigram_soft": 0.1124,
+    "unigram_hard": 0.117,
+    "full_soft": 0.2837,
+    "full_hard": 0.2592,
+    "saturation": {
+      "att_enc": 0.5675,
+      "static": 0.5917,
+      "uni_enc": 0.5732
+    }
+  },
+  "final": {
+    "bpc": 3.841,
+    "acc": 0.2833,
+    "hard_bpc": 4.0023,
+    "hard_acc": 0.2573
+  },
+  "sample_hard_topk5": "xt thyself\nOf all the world I loved and to him put\nThe manage of ▌ asetett the the wouhe m the ofiseee te the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the t"
+}

@@ -4,13 +4,14 @@
   "gate-lm": {
     "bpc": 3.3398,
     "acc": 0.345,
-    "train_s": 2788.5,
+    "train_s": 2144.1,
     "hard_bpc": 7.1512,
     "hard_acc": 0.1895,
     "alpha": 1.321,
     "beta": 10.17,
     "gate_saturation": 0.6942,
     "sample_hard": "re once\nThou call'dst me up at midnight to fetch dew\nFrom the st ▌  me ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ble ",
-    "sample_hard_topk5": " of her beauty and her wit,\nHer affability and bashful modesty,\n ▌ FLORYht.YzHl gits bray'w bray'w brazSf gits bro, gits bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w"
+    "sample_hard_topk5": " of her beauty and her wit,\nHer affability and bashful modesty,\n ▌ FLORYht.YzHl gits bray'w bray'w brazSf gits bro, gits bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w bray'w",
+    "checkpoint": "phase3_charlm_v03.pt"
   }
 }
