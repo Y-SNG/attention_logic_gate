@@ -60,6 +60,8 @@ class LogicLayer(nn.Module):
         self.temp = 1.0  # softmax temperature; anneal below 1 to sharpen
                          # gate choices so the relaxation approaches the
                          # hardened circuit (closes the soft->hard gap)
+        self.ste = False  # straight-through: forward with the argmax gate
+                          # (the hardened circuit), backward through softmax
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Soft forward. x: (..., in_dim) floats in [0,1] -> (..., out_dim)."""
@@ -68,7 +70,11 @@ class LogicLayer(nn.Module):
         patterns = torch.stack(
             [(1 - a) * (1 - b), (1 - a) * b, a * (1 - b), a * b], dim=-1
         )  # (..., out_dim, 4)
-        w4 = F.softmax(self.weights / self.temp, dim=-1) @ self.table  # (out_dim, 4)
+        p = F.softmax(self.weights / self.temp, dim=-1)
+        if self.ste:
+            hard = F.one_hot(self.weights.argmax(-1), 16).to(p.dtype)
+            p = hard + p - p.detach()
+        w4 = p @ self.table  # (out_dim, 4)
         return (patterns * w4).sum(-1)
 
     @torch.no_grad()
