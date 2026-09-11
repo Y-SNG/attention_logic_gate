@@ -4,6 +4,8 @@
 
 **結論(Phase 1): できる。** 完全一致型ゲートAttention(設計A・QK共有エンコーダ)は、residual初期化 + 12bitコードの下で、連想想起タスクを **3シード全てで100%** 解き、学習系列長 N=8 から **N=16/32 へ完全汎化**する。しかも学習後にゲートを固定した**純粋なブール回路(soft→hardの精度劣化ゼロ)**として。
 
+**Phase 2**: 閾値型のハード化ギャップはθ整数校正で全面解決(6/6ラン100%)。induction head(カウント+argmax=多数決読み出し)も**オラクル上限で全長100%**。2段ルーティングの合成は段階学習でなら100%に到達するが、end-to-end学習は未解決 — これが現在のフロンティア。
+
 ## セットアップ
 
 ```bash
@@ -70,6 +72,41 @@ MLPでは解けず、Attentionがあれば解ける = タスクは「入力依�
 
 **効くのは「residual初期化 × コード幅の余裕」の組**。解釈: residual初期化(パススルーゲート寄りの初期化)が深さ方向の勾配と恒等写像への到達可能性を確保し、12bitコード(6bitキーに対し2倍)が「厳密な全単射」を「余裕のある単射」に緩めて衝突回避を容易にする。片方だけでは局所解(コード衝突)から抜けられない。カリキュラムは不要。
 
+## Phase 2: ハード化ギャップ・多段合成・induction head
+
+### 2a: B(閾値型)のハード化ギャップ解消 — 解決(`results/phase2a.json`)
+
+処方: 学習中にβ(sigmoid閾値の鋭さ)を2→10へアニール + 学習後にθを整数グリッドで検証校正。
+**6ラン(sep/shared × 3シード)全てで hard 100%(N=8/16/32)**。校正θは11〜12(12bit中)に収束 = ほぼ完全一致判定をpopcountで実装した形。soft 5.9%なのにhard 100%というシードもあり(連続緩和より離散回路が正しい)、θ校正が本質的に効いている。
+
+### 2c: induction head(LMへの一歩)— 解決(`results/phase2c.json`)
+
+タスク: 相異な64語彙トークンのランダムパターン(長さT/2)+その複写。後半の次トークン予測は「現トークンの過去出現を探し、その次を出す」inductionが必須(サンプル毎に写像が変わるため暗記不能)。
+
+モデル `CountingGateAttention`: prev-token配線は固定、学習するのは一致判定回路のみ。**読み出しはsoftmaxではなく「一致カウント+argmax」= 多値多数決**(元計画の「正規化のゲート化」をこの形で投入)。ハード推論は整数投票。
+
+| モデル | T=32(学習長) | T=64 |
+|---|---|---|
+| **gate-counting** | **100 / 100(soft/hard、3/3シード)** | **100 / 100** |
+| オラクル(完全ルーティング上限) | 100 | 100 |
+| Transformer 2層(対照) | 100 | —(学習位置埋め込みのため実行不能) |
+| static(現トークンのみ) | 1.6% | 1.5% |
+
+ゲート版は**位置パラメータを持たないため2倍長へも無条件で完全汎化**。
+
+### 2b: 2段ルーティングの合成(V[V[q]])— 部分的成功・研究フロンティア(`results/phase2b*.json`)
+
+| 学習方法(gateA 2層) | N=8 | N=16 | N=32 |
+|---|---|---|---|
+| end-to-end(QK非共有) | 11–15% | ~3% | ~2%(=1層対照と同等、チャンス付近) |
+| end-to-end(QK共有) | 50–78% | 23–55% | 6–23% |
+| + 中間目標V[q]の補助損失 | 78–85% | 54–66% | 23–41% |
+| **段階学習(hop1→凍結→hop2)** | **100 / 92 / 100** | **100 / 82 / 100** | **100 / 60 / 100**(シード別) |
+| softmax 2層(対照) | 100% | 100% | 100% |
+| MLP(対照) | 17% | — | — |
+
+全ゲート実験で**soft=hardが完全一致** → ボトルネックは離散化ではなく**合成回路のend-to-end最適化**。段階学習で2/3シードが全長100%になることから、2-hopブール回路の表現は勾配で到達可能であり、「教師信号が最終出力のみのとき、2つのルーティング回路を同時に整列させる」ことだけが未解決。これが論文の第2の主張(限界と処方)になる。
+
 ## リポジトリ構成
 
 ```
@@ -78,13 +115,16 @@ gatelogic/attention.py   GateAttentionA(XNOR+AND)/ GateAttentionB(popcount≥θ)
 gatelogic/baselines.py   softmax Attention / MLP対照
 experiments/phase0_sanity.py   ブール関数 + 二値化MNIST(soft vs hard)
 experiments/phase1_recall.py   連想想起(--code-bits --hidden --residual-init --mix-lengths --models --out)
+experiments/export_circuit.py  勝ち構成をハード化して回路をJSONへ(→ viz/)
+experiments/phase2a_theta.py   βアニール+θ整数校正
+experiments/phase2b_twohop.py  2-hop連想想起(--models で共有/補助損失/段階学習を選択)
+experiments/phase2c_induction.py  induction head(カウント+argmax読み出し)
+viz/circuit_viewer.html  学習回路のインタラクティブ可視化
 results/                 全実験のJSON
 ```
 
-## 次のステップ(Phase 2〜)
+## 次のステップ(Phase 3〜)
 
-1. **Bのハード化ギャップ解消**: 学習中にθを整数格子へアニール、またはβスケジュールで判定を先鋭化
-2. **gateA-sepの安定化**: 共有初期化→分離fine-tune、あるいはコード幅をさらに拡大(アライメントの緩和)
-3. **正規化のゲート化**: `MajorityNorm`(多数決ゲート)の実験投入
-4. **2〜4層スタックで文字レベルLM** → ModernBERT蒸留
-5. GPU環境で本家difflogic CUDA実装に差し替え、スケール検証
+1. **2-hopのend-to-end最適化**(本命の未解決問題): 段階学習→joint fine-tune、コード幅アニール、Gumbelノイズ、hop間のカリキュラム
+2. **CountingGateAttention + ゲートMLPブロックの多層化**で実テキストの文字レベルLM(2-gram一致など文脈幅の拡大)
+3. GPU環境で本家difflogic CUDA実装に差し替え、スケール検証 → ModernBERT蒸留
